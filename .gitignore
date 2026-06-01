@@ -49,6 +49,7 @@ logs/
 
 # Playwright MCP artifacts
 .playwright-mcp/
+.mcp.json
 
 # Environment variables
 .env

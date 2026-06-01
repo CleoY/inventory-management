@@ -74,6 +74,59 @@
           </table>
         </div>
       </div>
+
+      <!-- Restocking orders are internal purchase orders submitted to suppliers,
+           distinct from customer-facing orders above. They load independently
+           so a filter change on customer orders doesn't clear this section. -->
+      <div class="card restocking-section">
+        <div class="card-header">
+          <h3 class="card-title">Submitted Restocking Orders ({{ restockingOrders.length }})</h3>
+        </div>
+
+        <div v-if="restockingLoading" class="loading">{{ t('common.loading') }}</div>
+        <div v-else-if="restockingError" class="error">{{ restockingError }}</div>
+        <div v-else-if="restockingOrders.length === 0" class="empty-state">
+          No restocking orders have been submitted yet.
+        </div>
+        <div v-else class="table-container">
+          <table class="orders-table restocking-table">
+            <thead>
+              <tr>
+                <th class="col-order-number">Order #</th>
+                <th class="col-restock-items">Items</th>
+                <th class="col-value">Total Cost</th>
+                <th class="col-date">Order Date</th>
+                <th class="col-date-wide">Expected Delivery</th>
+                <th class="col-status">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="order in restockingOrders" :key="order.order_number">
+                <td class="col-order-number"><strong>{{ order.order_number }}</strong></td>
+                <td class="col-restock-items">
+                  <!-- Show item count with names as a compact comma-separated list
+                       so the cell remains scannable without needing a dropdown -->
+                  <span class="restock-item-count">{{ order.items.length }} item{{ order.items.length !== 1 ? 's' : '' }}</span>
+                  <span class="restock-item-names">{{ order.items.map(i => i.name).join(', ') }}</span>
+                </td>
+                <td class="col-value"><strong>{{ currencySymbol }}{{ order.total_cost.toLocaleString() }}</strong></td>
+                <td class="col-date">{{ formatDate(order.order_date) }}</td>
+                <td class="col-date-wide">
+                  {{ formatDate(order.expected_delivery) }}
+                  <!-- Standard supplier lead time is 14 days; surfaced here as a
+                       quick reference so planners can anticipate arrival windows -->
+                  <span class="lead-time-note">(14 day lead time)</span>
+                </td>
+                <td class="col-status">
+                  <!-- Restocking orders are always in Processing state when submitted;
+                       the badge class is hardcoded to warning accordingly -->
+                  <span class="badge warning">Processing</span>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
     </div>
   </div>
 </template>
@@ -95,6 +148,13 @@ export default {
     const loading = ref(true)
     const error = ref(null)
     const orders = ref([])
+
+    // Restocking orders are sourced from a separate endpoint and are not
+    // subject to the same customer-order filters (warehouse/category/status/month).
+    // They are loaded once on mount and remain stable while the user adjusts filters.
+    const restockingOrders = ref([])
+    const restockingLoading = ref(false)
+    const restockingError = ref(null)
 
     // Use shared filters
     const {
@@ -121,6 +181,19 @@ export default {
         error.value = 'Failed to load orders: ' + err.message
       } finally {
         loading.value = false
+      }
+    }
+
+    const loadRestockingOrders = async () => {
+      restockingLoading.value = true
+      restockingError.value = null
+      try {
+        restockingOrders.value = await api.getRestockingOrders()
+      } catch (err) {
+        restockingError.value = 'Failed to load restocking orders: ' + err.message
+        console.error('Restocking orders load error:', err)
+      } finally {
+        restockingLoading.value = false
       }
     }
 
@@ -153,13 +226,19 @@ export default {
       })
     }
 
-    onMounted(loadOrders)
+    // Load both data sets in parallel on mount so neither blocks the other
+    onMounted(() => {
+      Promise.all([loadOrders(), loadRestockingOrders()])
+    })
 
     return {
       t,
       loading,
       error,
       orders,
+      restockingOrders,
+      restockingLoading,
+      restockingError,
       getOrdersByStatus,
       getOrderStatusClass,
       formatDate,
@@ -275,5 +354,53 @@ export default {
 .item-meta {
   font-size: 0.813rem;
   color: #64748b;
+}
+
+/* Restocking section accent — blue left border distinguishes supplier
+   purchase orders from customer-facing orders above */
+.restocking-section {
+  border-left: 3px solid #2563eb;
+}
+
+/* Empty state for when no restocking orders have been submitted */
+.empty-state {
+  padding: 2rem 1.5rem;
+  color: #64748b;
+  font-size: 0.9rem;
+}
+
+/* Restocking table column widths */
+.restocking-table .col-restock-items {
+  width: auto; /* let items column absorb remaining space */
+}
+
+.restocking-table .col-date-wide {
+  width: 170px; /* extra room for the lead-time note below the date */
+}
+
+/* Item names cell layout: count on top, name list below in muted text */
+.restock-item-count {
+  display: block;
+  font-weight: 500;
+  font-size: 0.875rem;
+  color: #0f172a;
+}
+
+.restock-item-names {
+  display: block;
+  font-size: 0.8rem;
+  color: #64748b;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 320px;
+}
+
+/* Muted note shown beneath the expected delivery date */
+.lead-time-note {
+  display: block;
+  font-size: 0.75rem;
+  color: #94a3b8;
+  margin-top: 0.125rem;
 }
 </style>

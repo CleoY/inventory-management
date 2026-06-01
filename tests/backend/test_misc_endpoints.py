@@ -73,15 +73,18 @@ class TestDemandEndpoints:
         # Check for the new items we added
         skus = [item["item_sku"] for item in data]
 
-        # Should have Temperature Sensor Module and Logic Controller Board
-        assert "SNR-420" in skus, "Missing Temperature Sensor Module"
-        assert "CTL-330" in skus, "Missing Logic Controller Board"
+        # SKUs updated to match inventory.json so the Restocking page can join by SKU
+        assert "ULS-205" in skus, "Missing Ultrasonic Distance Sensor"
+        assert "MCU-402" in skus, "Missing 32-bit ARM Microcontroller"
 
-        # Verify they are marked as stable
+        # Verify ULS-205 is increasing and MCU-402 is decreasing
         for item in data:
-            if item["item_sku"] in ["SNR-420", "CTL-330"]:
-                assert item["trend"].lower() == "stable", \
-                    f"New item {item['item_name']} should have stable trend"
+            if item["item_sku"] == "ULS-205":
+                assert item["trend"].lower() == "increasing", \
+                    f"ULS-205 should have increasing trend"
+            if item["item_sku"] == "MCU-402":
+                assert item["trend"].lower() == "decreasing", \
+                    f"MCU-402 should have decreasing trend"
 
 
 class TestBacklogEndpoints:
